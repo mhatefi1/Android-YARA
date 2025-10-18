@@ -1,0 +1,87 @@
+<?xml version="1.0" encoding="utf-8"?>
+<com.google.android.material.card.MaterialCardView
+    xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:app="http://schemas.android.com/apk/res-auto"
+    xmlns:tools="http://schemas.android.com/tools"
+    android:layout_width="match_parent"
+    android:layout_height="wrap_content"
+    android:layout_marginStart="8dp"
+    android:layout_marginEnd="8dp"
+    android:layout_marginTop="6dp"
+    android:layout_marginBottom="6dp"
+    app:cardCornerRadius="14dp"
+    app:cardElevation="0dp"
+    app:strokeWidth="1dp"
+    app:strokeColor="?attr/colorOutline"
+    app:cardBackgroundColor="?attr/colorSurface">
+
+    <androidx.constraintlayout.widget.ConstraintLayout
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:padding="14dp">
+
+        <View
+            android:id="@+id/strip"
+            android:layout_width="4dp"
+            android:layout_height="0dp"
+            android:background="@color/detection_strip_error"
+            app:layout_constraintStart_toStartOf="parent"
+            app:layout_constraintTop_toTopOf="parent"
+            app:layout_constraintBottom_toBottomOf="parent"/>
+
+        <TextView
+            android:id="@+id/tvRuleName"
+            android:layout_width="0dp"
+            android:layout_height="wrap_content"
+            android:layout_marginStart="10dp"
+            android:layout_marginEnd="12dp"
+            android:textStyle="bold"
+            android:textSize="16sp"
+            android:ellipsize="end"
+            android:maxLines="1"
+            app:layout_constraintStart_toEndOf="@id/strip"
+            app:layout_constraintTop_toTopOf="parent"
+            app:layout_constraintEnd_toEndOf="parent"
+            tools:text="trojan.generic.high" />
+
+        <TextView
+            android:id="@+id/tvTarget"
+            android:layout_width="0dp"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="10dp"
+            android:layout_marginStart="10dp"
+            android:layout_marginEnd="12dp"
+            android:textSize="13sp"
+            android:textColor="?attr/colorOnSurfaceVariant"
+            android:ellipsize="middle"
+            android:maxLines="3"
+            app:layout_constraintStart_toEndOf="@id/strip"
+            app:layout_constraintTop_toBottomOf="@id/tvRuleName"
+            app:layout_constraintEnd_toStartOf="@id/btnDelete"
+            tools:text="Target: /storage/emulated/0/Download/very-long-file-name.apk" />
+
+        <com.google.android.material.button.MaterialButton
+            android:id="@+id/btnDelete"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="8dp"
+            android:text="Delete"
+            android:textSize="12sp"
+            android:textAllCaps="false"
+            android:textStyle="bold"
+            android:letterSpacing="0.02"
+            android:textColor="?attr/colorOnErrorContainer"
+            app:backgroundTint="?attr/colorErrorContainer"
+            app:cornerRadius="16dp"
+            app:elevation="1dp"
+            app:icon="@drawable/ic_delete_24"
+            app:iconGravity="textStart"
+            app:iconPadding="2dp"
+            app:iconSize="16dp"
+            app:iconTint="?attr/colorOnErrorContainer"
+            app:rippleColor="?attr/colorError"
+            app:layout_constraintEnd_toEndOf="parent"
+            app:layout_constraintTop_toBottomOf="@id/tvRuleName" />
+
+    </androidx.constraintlayout.widget.ConstraintLayout>
+</com.google.android.material.card.MaterialCardView>

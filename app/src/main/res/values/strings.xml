@@ -1,0 +1,4 @@
+<resources>
+    <string name="app_name">AndroYARA</string>
+    <string name="description">Use YARA rules to detect malware and indicators. powered by YARA version %s</string>
+</resources>

@@ -1,0 +1,7 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <color name="detection_strip_error">#FF3B30</color>
+    <color name="safe_card_bg">#E8F5E9</color>
+    <color name="safe_accent">#2E7D32</color>
+    <color name="safe_title_text">#1B5E20</color>
+</resources>
