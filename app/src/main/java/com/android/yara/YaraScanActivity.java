@@ -9,6 +9,7 @@ import android.content.pm.PackageManager;
 import android.database.Cursor;
 import android.net.Uri;
 import android.os.Bundle;
+import android.util.Log;
 import android.view.View;
 import android.widget.ImageView;
 import android.widget.RadioButton;
@@ -81,8 +82,6 @@ public class YaraScanActivity extends AppCompatActivity {
     private TextView tvProgress;
     private RadioButton rbSingleFile, rbInstalledApps;
     private View rowFilePicker;
-
-    // Results card (expandable)
     private MaterialCardView cardResults;
     private TextView tvResultsTitle;
     private ImageView ivResultsToggle;
@@ -155,7 +154,6 @@ public class YaraScanActivity extends AppCompatActivity {
             updateResultsExpansion(true);
         });
 
-        // Clicks (SAF only)
         btnSelectRules.setOnClickListener(v -> pickRules());
         btnChooseFile.setOnClickListener(v -> pickSingleFile());
         btnChooseFolder.setOnClickListener(v -> pickFolder());
@@ -207,6 +205,7 @@ public class YaraScanActivity extends AppCompatActivity {
     protected void onDestroy() {
         super.onDestroy();
         disposables.clear();
+        deleteRulesCacheDir();
         try {
             destroyYARA();
         } catch (Throwable ignore) {
@@ -854,7 +853,7 @@ public class YaraScanActivity extends AppCompatActivity {
     }
 
     private String copyRuleToCache(Uri uri, String fileName) throws Exception {
-        File dir = new File(getCacheDir(), "picked");
+        File dir = new File(getCacheDir(), "rules");
         if (!dir.exists()) dir.mkdirs();
         File out = new File(dir, "rule" + "_" + fileName);
         ContentResolver cr = getContentResolver();
@@ -867,6 +866,27 @@ public class YaraScanActivity extends AppCompatActivity {
             return out.getAbsolutePath();
         }
     }
+
+    private void deleteRulesCacheDir() {
+        try {
+            File dir = new File(getCacheDir(), "rules");
+            deleteRecursively(dir);
+        } catch (Throwable e) {
+        }
+    }
+
+    private static void deleteRecursively(@Nullable File f) {
+        if (f == null || !f.exists()) return;
+        if (f.isDirectory()) {
+            File[] children = f.listFiles();
+            if (children != null)
+                for (File c : children)
+                    deleteRecursively(c);
+        }
+        f.delete();
+    }
+
+
 
     private static String safeDisplayName(ContentResolver cr, Uri uri) {
         if (uri == null) return null;
