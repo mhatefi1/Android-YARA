@@ -51,6 +51,8 @@ import java.util.List;
 import java.util.Locale;
 import java.util.Objects;
 import java.util.Queue;
+import java.util.zip.ZipEntry;
+import java.util.zip.ZipInputStream;
 
 import io.reactivex.Observable;
 import io.reactivex.Single;
@@ -411,8 +413,9 @@ public class YaraScanActivity extends AppCompatActivity {
         disposables.add(
                 Single.fromCallable(() -> {
                             String label = readableName(fileUri);
-                            try (InputStream in = new BufferedInputStream(getContentResolver().openInputStream(fileUri))) {
-                                List<String> found = runYaraOnStreamChunks(label, in);
+                            boolean isApk = label.toLowerCase(Locale.US).endsWith(".apk");
+                            try (InputStream in = getContentResolver().openInputStream(fileUri)) {
+                                List<String> found = inspectAndScanStream(label, in, isApk);
                                 return new FileScanResult(label, fileUri, found);
                             }
                         })
@@ -478,9 +481,9 @@ public class YaraScanActivity extends AppCompatActivity {
                                                     .concatMap(file ->
                                                             Single.fromCallable(() -> {
                                                                         String label = file.getName() != null ? file.getName() : "(unnamed)";
-                                                                        try (InputStream in = new BufferedInputStream(
-                                                                                getContentResolver().openInputStream(file.getUri()))) {
-                                                                            List<String> found = runYaraOnStreamChunks(label, in);
+                                                                        boolean isApk = label.toLowerCase(Locale.US).endsWith(".apk");
+                                                                        try (InputStream in = getContentResolver().openInputStream(file.getUri())) {
+                                                                            List<String> found = inspectAndScanStream(label, in, isApk);
                                                                             return new FileScanResult(label, file.getUri(), found);
                                                                         }
                                                                     })
@@ -536,6 +539,30 @@ public class YaraScanActivity extends AppCompatActivity {
                 else if (f.isFile()) out.add(f);
             }
         }
+    }
+
+    private List<String> inspectAndScanStream(String label, InputStream in, boolean isApk) throws Exception {
+        if (isApk) {
+            return scanApkDexFiles(label, in);
+        } else {
+            return runYaraOnStreamChunks(label, in);
+        }
+    }
+
+    private List<String> scanApkDexFiles(String label, InputStream in) throws Exception {
+        LinkedHashSet<String> allDetections = new LinkedHashSet<>();
+        ZipInputStream zis = new ZipInputStream(new BufferedInputStream(in));
+        ZipEntry entry;
+        while ((entry = zis.getNextEntry()) != null) {
+            String entryName = entry.getName();
+            if (entryName != null && entryName.endsWith(".dex")) {
+                String specificLabel = label + " : " + entryName;
+                List<String> entryResults = runYaraOnStreamChunks(specificLabel, zis);
+                allDetections.addAll(entryResults);
+            }
+            zis.closeEntry();
+        }
+        return new ArrayList<>(allDetections);
     }
 
     private void scanAllInstalledAppsBuffer() {
@@ -644,8 +671,8 @@ public class YaraScanActivity extends AppCompatActivity {
     }
 
     private List<String> runYaraOnApkBuffer(String apkPath, String label) throws Exception {
-        try (InputStream in = new BufferedInputStream(Files.newInputStream(Paths.get(apkPath)))) {
-            return runYaraOnStreamChunks(label, in);
+        try (InputStream in = Files.newInputStream(Paths.get(apkPath))) {
+            return inspectAndScanStream(label, in, true);
         }
     }
 
