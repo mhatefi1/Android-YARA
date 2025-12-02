@@ -1,14 +1,20 @@
 package com.android.yara;
 
 import android.app.Activity;
+import android.app.NotificationChannel;
+import android.app.NotificationManager;
+import android.app.PendingIntent;
 import android.content.ClipData;
 import android.content.ContentResolver;
+import android.content.Context;
 import android.content.Intent;
 import android.content.pm.PackageInfo;
 import android.content.pm.PackageManager;
 import android.database.Cursor;
 import android.net.Uri;
+import android.os.Build;
 import android.os.Bundle;
+import android.util.Log;
 import android.view.View;
 import android.widget.ImageView;
 import android.widget.RadioButton;
@@ -22,6 +28,8 @@ import androidx.activity.result.contract.ActivityResultContracts;
 import androidx.annotation.NonNull;
 import androidx.annotation.Nullable;
 import androidx.appcompat.app.AppCompatActivity;
+import androidx.core.app.NotificationCompat;
+import androidx.core.content.ContextCompat;
 import androidx.documentfile.provider.DocumentFile;
 import androidx.recyclerview.widget.LinearLayoutManager;
 import androidx.recyclerview.widget.RecyclerView;
@@ -107,6 +115,10 @@ public class YaraScanActivity extends AppCompatActivity {
     private String pendingUninstallPackage = null;
 
     long start;
+    private static final String CHANNEL_ID = "yara_scan_channel";
+    private static final int NOTIFICATION_ID = 1001;
+    private NotificationManager notificationManager;
+    private ActivityResultLauncher<String> requestPermissionLauncher;
 
     @Override
     protected void onCreate(@Nullable Bundle savedInstanceState) {
@@ -133,6 +145,21 @@ public class YaraScanActivity extends AppCompatActivity {
         tvResultsTitle = findViewById(R.id.tvResultsTitle);
         ivResultsToggle = findViewById(R.id.ivResultsToggle);
         rvResults = findViewById(R.id.rvResults);
+
+        notificationManager = (NotificationManager) getSystemService(Context.NOTIFICATION_SERVICE);
+        createNotificationChannel();
+
+        requestPermissionLauncher = registerForActivityResult(
+                new ActivityResultContracts.RequestPermission(),
+                isGranted -> {
+                    if (isGranted) {
+                        maybeStartScan();
+                    } else {
+                        Toast.makeText(this, "Notifications disabled. Scan will run without them.", Toast.LENGTH_SHORT).show();
+                        maybeStartScan();
+                    }
+                }
+        );
 
         tvScreenSubtitle.setText(getString(R.string.description, getYARAVersion()));
 
@@ -206,11 +233,76 @@ public class YaraScanActivity extends AppCompatActivity {
     protected void onDestroy() {
         super.onDestroy();
         disposables.clear();
+        cancelNotification();
         deleteRulesCacheDir();
         try {
             destroyYARA();
         } catch (Throwable ignore) {
         }
+    }
+
+
+    private void updateNotification(String title, int progress, int max, boolean indeterminate) {
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
+            if (ContextCompat.checkSelfPermission(this, android.Manifest.permission.POST_NOTIFICATIONS)
+                    != PackageManager.PERMISSION_GRANTED) {
+                return;
+            }
+        }
+
+        Intent intent = new Intent(this, YaraScanActivity.class);
+        intent.setFlags(Intent.FLAG_ACTIVITY_SINGLE_TOP | Intent.FLAG_ACTIVITY_CLEAR_TOP);
+        PendingIntent pendingIntent = PendingIntent.getActivity(this, 0, intent,
+                PendingIntent.FLAG_IMMUTABLE | PendingIntent.FLAG_UPDATE_CURRENT);
+
+        NotificationCompat.Builder builder = new NotificationCompat.Builder(this, CHANNEL_ID)
+                .setSmallIcon(android.R.drawable.stat_sys_download)
+                .setContentTitle("YARA Scanner")
+                .setContentText(title)
+                .setPriority(NotificationCompat.PRIORITY_LOW)
+                .setOnlyAlertOnce(true)
+                .setOngoing(true)
+                .setContentIntent(pendingIntent)
+                .setProgress(max, progress, indeterminate);
+
+        notificationManager.notify(NOTIFICATION_ID, builder.build());
+    }
+
+    private void cancelNotification() {
+        notificationManager.cancel(NOTIFICATION_ID);
+    }
+
+    private void showCompleteNotification(int detections) {
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU &&
+                ContextCompat.checkSelfPermission(this, android.Manifest.permission.POST_NOTIFICATIONS) != PackageManager.PERMISSION_GRANTED) {
+            return;
+        }
+
+        Intent intent = new Intent(this, YaraScanActivity.class);
+        intent.setFlags(Intent.FLAG_ACTIVITY_SINGLE_TOP | Intent.FLAG_ACTIVITY_CLEAR_TOP);
+        PendingIntent pendingIntent = PendingIntent.getActivity(this, 0, intent, PendingIntent.FLAG_IMMUTABLE);
+
+        String msg = detections > 0 ? "Scan complete. Found " + detections + " threats." : "Scan complete. No threats found.";
+
+        NotificationCompat.Builder builder = new NotificationCompat.Builder(this, CHANNEL_ID)
+                .setSmallIcon(android.R.drawable.stat_sys_download_done)
+                .setContentTitle("Scan Finished")
+                .setContentText(msg)
+                .setPriority(NotificationCompat.PRIORITY_DEFAULT)
+                .setOngoing(false)
+                .setAutoCancel(true)
+                .setContentIntent(pendingIntent);
+
+        notificationManager.notify(NOTIFICATION_ID, builder.build());
+    }
+
+    private void createNotificationChannel() {
+        CharSequence name = "YARA Scan Progress";
+        String description = "Shows progress of active YARA scans";
+        int importance = NotificationManager.IMPORTANCE_LOW;
+        NotificationChannel channel = new NotificationChannel(CHANNEL_ID, name, importance);
+        channel.setDescription(description);
+        notificationManager.createNotificationChannel(channel);
     }
 
     private void registerLaunchers() {
@@ -354,7 +446,6 @@ public class YaraScanActivity extends AppCompatActivity {
     }
 
     private void maybeStartScan() {
-        start = System.currentTimeMillis();
         if (isScanning) {
             Toast.makeText(this, "A scan is already running.", Toast.LENGTH_SHORT).show();
             return;
@@ -363,6 +454,16 @@ public class YaraScanActivity extends AppCompatActivity {
             Toast.makeText(this, "Please select YARA rule files first.", Toast.LENGTH_LONG).show();
             return;
         }
+
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
+            if (ContextCompat.checkSelfPermission(this, android.Manifest.permission.POST_NOTIFICATIONS)
+                    != PackageManager.PERMISSION_GRANTED) {
+                requestPermissionLauncher.launch(android.Manifest.permission.POST_NOTIFICATIONS);
+                return;
+            }
+        }
+
+        start = System.currentTimeMillis();
 
         results.clear();
         resultAdapter.notifyDataSetChanged();
@@ -408,7 +509,7 @@ public class YaraScanActivity extends AppCompatActivity {
         setScanning(true);
         progressBar.setIndeterminate(true);
         tvProgress.setText("Scanning...");
-
+        updateNotification("Scanning...", 0, 0, true);
         disposables.add(
                 Single.fromCallable(() -> {
                             String label = readableName(fileUri);
@@ -435,8 +536,10 @@ public class YaraScanActivity extends AppCompatActivity {
                                 results.addAll(rows);
                                 resultAdapter.notifyItemRangeInserted(start, rows.size());
                                 updateResultsCardVisibility();
+                                showCompleteNotification(res.detections.size());
                             }
                         }, err -> {
+                            cancelNotification();
                             Toast.makeText(this, "Scan failed: " + err.getMessage(), Toast.LENGTH_LONG).show();
                         })
         );
@@ -474,6 +577,7 @@ public class YaraScanActivity extends AppCompatActivity {
 
                                     final int total = files.size();
                                     final int[] index = {0};
+                                    updateNotification("Preparing...", 0, total, false);
 
                                     disposables.add(
                                             Observable.fromIterable(files)
@@ -490,6 +594,10 @@ public class YaraScanActivity extends AppCompatActivity {
                                                                     .toObservable()
                                                     )
                                                     .observeOn(AndroidSchedulers.mainThread())
+                                                    .doOnNext(fileScanResult -> {
+                                                        index[0]++;
+                                                        updateNotification("Scanning " + index[0] + "/" + total, index[0], total, false);
+                                                    })
                                                     .doFinally(() -> setScanning(false))
                                                     .subscribe(res -> {
                                                                 index[0]++;
@@ -508,8 +616,16 @@ public class YaraScanActivity extends AppCompatActivity {
                                                                     updateResultsCardVisibility();
                                                                 }
                                                             },
-                                                            err -> Toast.makeText(this, "Scan error: " + err.getMessage(), Toast.LENGTH_LONG).show(),
+                                                            err -> {
+                                                                cancelNotification();
+                                                                Toast.makeText(this, "Scan error: " + err.getMessage(), Toast.LENGTH_LONG).show();
+                                                            },
                                                             () -> {
+                                                                int detectionsCount = 0;
+                                                                for (ScanResult r : results)
+                                                                    if (!r.isSafe) detectionsCount++;
+                                                                showCompleteNotification(detectionsCount);
+
                                                                 if (!hasDetections(results)) {
                                                                     addCleanRow("Files scanned: " + total);
                                                                 }
@@ -518,6 +634,7 @@ public class YaraScanActivity extends AppCompatActivity {
                                     );
                                 },
                                 err -> {
+                                    cancelNotification();
                                     // Reset UI on traversal error
                                     progressBar.setVisibility(View.GONE);
                                     tvProgress.setText("");
@@ -583,7 +700,7 @@ public class YaraScanActivity extends AppCompatActivity {
         progressBar.setMax(total);
         progressBar.setProgress(0);
         tvProgress.setText("Preparing...");
-
+        updateNotification("Preparing app scan...", 0, total, false);
         final int[] index = {0};
 
         disposables.add(
@@ -614,9 +731,12 @@ public class YaraScanActivity extends AppCompatActivity {
                                         .toObservable()
                         )
                         .observeOn(AndroidSchedulers.mainThread())
+                        .doOnNext(appScanResult -> {
+                            index[0]++;
+                            updateNotification("Scanning " + appScanResult.appLabel, index[0], total, false);
+                        })
                         .doFinally(() -> setScanning(false))
                         .subscribe(appRes -> {
-                                    index[0]++;
                                     tvProgress.setText("Scanning " + appRes.appLabel + " (" + index[0] + "/" + total + ")");
                                     progressBar.setProgress(index[0]);
 
@@ -632,8 +752,15 @@ public class YaraScanActivity extends AppCompatActivity {
                                         updateResultsCardVisibility();
                                     }
                                 },
-                                err -> Toast.makeText(this, "Scan error: " + err.getMessage(), Toast.LENGTH_LONG).show(),
+                                err -> {
+                                    cancelNotification();
+                                    Toast.makeText(this, "Scan error: " + err.getMessage(), Toast.LENGTH_LONG).show();
+                                },
                                 () -> {
+                                    int detectionsCount = 0;
+                                    for(ScanResult r : results) if(!r.isSafe) detectionsCount++;
+                                    showCompleteNotification(detectionsCount);
+
                                     if (!hasDetections(results)) {
                                         addCleanRow("Apps scanned: " + total);
                                     }
@@ -911,8 +1038,6 @@ public class YaraScanActivity extends AppCompatActivity {
         }
         f.delete();
     }
-
-
 
     private static String safeDisplayName(ContentResolver cr, Uri uri) {
         if (uri == null) return null;
