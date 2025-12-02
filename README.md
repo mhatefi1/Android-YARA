@@ -14,8 +14,10 @@ to decide whether a file **matches**. YARA is open‑source (BSD 3‑Clause).
 ## What this app does
 
 - **Buffer‑based scanning**
-  - No raw path access
+  - No raw path access and extra permissions
   - Efficient **5MB chunked reads** with de‑duplicated matches
+- **DEX Scanning**
+  - Instead of scanning the compressed APK zip (which hides patterns), it streams the actual executable bytecode to the engine.
 - **Rules picker**
   - Load plaint text or compiled (`.yarac`) rules
 - **Privacy**
