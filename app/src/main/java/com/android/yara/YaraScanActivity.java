@@ -116,7 +116,8 @@ public class YaraScanActivity extends AppCompatActivity {
 
     long start;
     private static final String CHANNEL_ID = "yara_scan_channel";
-    private static final int NOTIFICATION_ID = 1001;
+    private static final int NOTIF_ID_PROGRESS = 1001;
+    private static final int NOTIF_ID_COMPLETE = 1002;
     private NotificationManager notificationManager;
     private ActivityResultLauncher<String> requestPermissionLauncher;
 
@@ -265,14 +266,15 @@ public class YaraScanActivity extends AppCompatActivity {
                 .setContentIntent(pendingIntent)
                 .setProgress(max, progress, indeterminate);
 
-        notificationManager.notify(NOTIFICATION_ID, builder.build());
+        notificationManager.notify(NOTIF_ID_PROGRESS, builder.build());
     }
 
     private void cancelNotification() {
-        notificationManager.cancel(NOTIFICATION_ID);
+        notificationManager.cancel(NOTIF_ID_PROGRESS);
     }
 
     private void showCompleteNotification(int detections) {
+        notificationManager.cancel(NOTIF_ID_PROGRESS);
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU &&
                 ContextCompat.checkSelfPermission(this, android.Manifest.permission.POST_NOTIFICATIONS) != PackageManager.PERMISSION_GRANTED) {
             return;
@@ -292,8 +294,7 @@ public class YaraScanActivity extends AppCompatActivity {
                 .setOngoing(false)
                 .setAutoCancel(true)
                 .setContentIntent(pendingIntent);
-
-        notificationManager.notify(NOTIFICATION_ID, builder.build());
+        notificationManager.notify(NOTIF_ID_COMPLETE, builder.build());
     }
 
     private void createNotificationChannel() {
@@ -805,14 +806,24 @@ public class YaraScanActivity extends AppCompatActivity {
     private List<String> runYaraOnStreamChunks(String label, InputStream in) throws Exception {
         byte[] chunk = new byte[CHUNK_SIZE];
         LinkedHashSet<String> all = new LinkedHashSet<>();
-        int n;
-        while ((n = in.read(chunk)) != -1) {
+        while (true) {
+            int bytesRead = 0;
+            int count;
+            while (bytesRead < CHUNK_SIZE && (count = in.read(chunk, bytesRead, CHUNK_SIZE - bytesRead)) != -1) {
+                bytesRead += count;
+            }
+            if (bytesRead == 0) {
+                break;
+            }
             List<String> args = new ArrayList<>();
             args.add("./main");
             if (compiled) args.add("-C");
             args.addAll(rulesList);
-            List<String> part = runYARA(args, label, chunk, n);
+            List<String> part = runYARA(args, label, chunk, bytesRead);
             if (part != null) all.addAll(part);
+            if (bytesRead < CHUNK_SIZE) {
+                break;
+            }
         }
         return new ArrayList<>(all);
     }
